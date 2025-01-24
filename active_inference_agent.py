@@ -28,7 +28,7 @@ def create_a(observations, states, env_map):
                 A[1][2, curr_pos] = 1.0
             else:
                 A[1][1, curr_pos] = 1.0
-    print(f'A:\n{A[1][:,:]}')
+    # print(f'A:\n{A[1][:,:]}')
     return A
 
 def create_b(states, actions, env_map):
@@ -73,16 +73,16 @@ def create_c(observations):
     # we are concerned with C[1], as that specifies the preferred tile type observations to see
     # C structure is: C[0] = array of len 16. C[1] = array of len 4
     # C1 = ['S', 'F' 'H' 'G']
-    C[1] = np.array([0.0, 0.0, -1.0, 10.0]) # the values of these are in log probability space
-    print(f'C={C}')
+    C[1] = np.array([-0.1, -0.01, -2.0, 10.0]) # the values of these are in log probability space
+    # print(f'C={C}')
     return C
 
 def create_d(states):
     num_states = [len(state_factor) for state_factor in states]
     D = utils.obj_array_zeros(num_states)
-    D[0][0:16] = 1 / 16 # start in first position. Why is this important to the agent working??
+    D[0][0:num_states[0]] = 1 / num_states[0] # start in first position. Why is this important to the agent working??
     D[0] = D[0] / (D[0].sum(axis=0)) # normalize the matrix
-    print(f'D={D}')
+    # print(f'D={D}')
     return D
 
 def specify_pomdp(env_map):
@@ -109,12 +109,12 @@ def specify_pomdp(env_map):
 
 def main():
     # specify the environment size here
-    env_size = 4 # works up to size 4.
+    env_size = 10 # works up to size 4.
     env_map = generate_random_map(env_size)
-    for row in env_map:
-        print(row)
+    # for row in env_map:
+    #     print(row)
 
-    env = gym.make('FrozenLake-v1', is_slippery=True, desc=env_map, render_mode='human')
+    env = gym.make('FrozenLake-v1', is_slippery=False, max_episode_steps=30, desc=env_map, render_mode='human')
     T = 10
 
     S, O, U, A, B, C, D = specify_pomdp(env_map=env_map)
@@ -128,20 +128,24 @@ def main():
         # tile_type for the agent.
         obs = [position, tile_type]
 
-        for t in range(T):
+        t = 0
+        done = False
+        while not done:
             qs = my_agent.infer_states(obs)
 
             q_pi, efe = my_agent.infer_policies()
             chosen_action_id = my_agent.sample_action()
-            print(chosen_action_id)
+            # print(chosen_action_id)
             chosen_action = int(chosen_action_id[0])
 
             observation, reward, terminated, truncated, info = env.step(chosen_action)
 
             tile_type = O[1].index(env_map[observation // env_size][observation % env_size])
             obs = [position, tile_type]
-            print(f'At timestep={t}\n\tqs={qs}\n\tq_pi={q_pi}\n\tefe={efe}\n\taction={chosen_action}\n\tobs={obs}')
-
+            # print(f'At timestep={t}\n\tqs={qs}\n\tq_pi={q_pi}\n\tefe={efe}\n\taction={chosen_action}\n\tobs={obs}')
+            if terminated or truncated:
+                done = True
+            t += 1
     finally:
         env.close()
 

@@ -1,6 +1,7 @@
 import gymnasium as gym
 from gymnasium.envs.toy_text.frozen_lake import generate_random_map
 import numpy as np
+import matplotlib.pyplot as plt
 from pymdp import utils
 from pymdp.agent import Agent
 
@@ -63,17 +64,29 @@ def create_b(states, actions, env_map):
 
     # going down is up flipped over horizontal and vertical
     B[0][:, :, 1] = np.fliplr(np.flipud(B[0][:, :, 3]))
-
+    # for mat in B:
+    #     for action in actions[0]:
+    #         print(f'B-transitions given action {action}:\n{mat[:, :, actions[0].index(action)]}')
     return B
 
-def create_c(observations):
+def create_c(observations, env_size):
     num_obs = [len(obs) for obs in observations]
     C = utils.obj_array_zeros(num_obs)
 
     # we are concerned with C[1], as that specifies the preferred tile type observations to see
     # C structure is: C[0] = array of len 16. C[1] = array of len 4
     # C1 = ['S', 'F' 'H' 'G']
-    C[1] = np.array([-0.1, -0.01, -2.0, 10.0]) # the values of these are in log probability space
+
+    # 2/6/2025 test idea: calculate the manhattan distance from each position to the goal, and use that to specify
+    #   the agent's preferences.
+    # num_positions = len(observations[0])
+    # for i in range(env_size**2):
+    #     row = num_positions // env_size
+    #     col = num_positions % env_size
+    #     manhattan_dist = (env_size - row) + (env_size - col)
+    #     C[0][i] = -1 * manhattan_dist
+    C[1] = np.array([0, 0, -2.1, 2.2]) # the values of these are in log probability space
+    # -0.1, -0.0001, -2.1, 2.2
     # print(f'C={C}')
     return C
 
@@ -102,27 +115,57 @@ def specify_pomdp(env_map):
 
     A = create_a(observations=O, states=S, env_map=env_map)
     B = create_b(states=S, actions=U, env_map=env_map)
-    C = create_c(observations=O)
+    C = create_c(observations=O, env_size=env_size)
     D = create_d(states=S)
 
     return S, O, U, A, B, C, D
 
 def main():
     # specify the environment size here
-    env_size = 10 # works up to size 4.
+    env_size = 4 # works up to size 4.
+    seed = 422
     env_map = generate_random_map(env_size)
-    # for row in env_map:
-    #     print(row)
-
-    env = gym.make('FrozenLake-v1', is_slippery=False, max_episode_steps=30, desc=env_map, render_mode='human')
+    for row in env_map:
+        print(row)
+    """
+    map size = 6
+    seed = 422
+    desc =  SFFFFF
+            FFFHHH
+            HFFHFF
+            FFHFFF
+            FFFFFH
+            FFHFFG
+    desc size = 6 =
+            SHFFFF
+            FFHFHF
+            FFFFFH
+            FFHFFF
+            HHFFHH
+            HFFFFG
+            
+    desc size = 3
+            SHF
+            FFF
+            FHG
+    
+    """
+    env_map = ['SHFFFF',
+                'FFHFHF',
+                'FFFFFH',
+                'FFHFFF',
+                'HHFFHH',
+                'HFFFFG']
+    env = gym.make('FrozenLake-v1', is_slippery=False, max_episode_steps=20, desc=env_map, render_mode='human')
     T = 10
 
     S, O, U, A, B, C, D = specify_pomdp(env_map=env_map)
 
-    my_agent = Agent(A=A, B=B, C=C, D=D)
+    my_agent = Agent(A=A, B=B, C=C, D=D, policy_len=1, inference_horizon=1, save_belief_hist=True) # adjust policy length to plan x number of steps in future.
 
     try:
-        observation, info = env.reset()
+        observation, info = env.reset(seed=None)
+        print(f'info: {info}')
         position = observation
         tile_type = O[1].index(env_map[observation // env_size][observation % env_size]) # using the env_map to get the
         # tile_type for the agent.
@@ -137,6 +180,7 @@ def main():
             chosen_action_id = my_agent.sample_action()
             # print(chosen_action_id)
             chosen_action = int(chosen_action_id[0])
+            print(f'chosen action: {chosen_action}')
 
             observation, reward, terminated, truncated, info = env.step(chosen_action)
 
@@ -148,7 +192,8 @@ def main():
             t += 1
     finally:
         env.close()
-
+        print(my_agent.qs_hist)
+        print(my_agent.q_pi_hist)
 
 
 main()
